@@ -13,7 +13,7 @@ target_df = df[["住宅価格"]]
 train_df = df.iloc[:,1:14]
 
 
-
+print('a')
 #XGBoostで学習するためのデータ形式に変換
 dtrain = lgb.Dataset(train_df)
 dvalid = lgb.Dataset(target_df)
