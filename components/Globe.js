@@ -52,7 +52,7 @@ export default function GlobeComponent({points}=[]){
 
       globe.controls().enableZoom = true
       globe.controls().autoRotate = true
-      globe.controls().autoRotateSpeed = 0.1
+      globe.controls().autoRotateSpeed = 10
     })
   },[isClient, points])
   
