@@ -25,11 +25,11 @@ export default function Home() {
   },[])
 
   return (
-    <div>
-      <h1>🌎世界市場</h1>
-      <GlobeComponent points={companies}/>
+    <div style={{ backgroundColor: "black", minHeight: "100vh" }}>
+      <h1 style={{ color: "white" }}>🌎世界市場</h1>
+      <GlobeComponent points={companies} />
     </div>
-  )
+  );
 }
 
 
