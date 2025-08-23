@@ -1,7 +1,10 @@
+// pages/index.jsx
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { supabase } from "../lib/supabaseClient";
-import GlobePhotos from "../components/GlobePhotos";   // ← ここを変更
 import PhotoUploadForm from "../components/PhotoUploadForm";
+
+const CesiumGlobe = dynamic(() => import("../components/CesiumGlobe"), { ssr: false });
 
 export default function Home() {
   const [photos, setPhotos] = useState([]);
@@ -16,17 +19,7 @@ export default function Home() {
       console.error("photos load error:", error);
       return;
     }
-    setPhotos(
-      (data || []).map((p) => ({
-        id: p.id,
-        title: p.title,
-        description: p.description,
-        lat: p.lat,
-        lng: p.lng,
-        public_url: p.public_url,
-        taken_at: p.taken_at,
-      }))
-    );
+    setPhotos(data ?? []);
   }
 
   useEffect(() => {
@@ -34,18 +27,18 @@ export default function Home() {
   }, []);
 
   const handleUploaded = async () => {
-    await loadPhotos(); // 投稿後に最新を読み直す
+    await loadPhotos(); // 投稿後に反映
   };
 
   return (
-    <div style={{ backgroundColor: "black", minHeight: "100vh", padding: 16 }}>
-      <h1 style={{ color: "white" }}>🌎 フォト地球儀</h1>
+    <div style={{ backgroundColor: "black", minHeight: "100vh", overflow: "hidden" }}>
+      <h1 style={{ color: "white", padding: 16 }}>🌍 フォト地球儀 </h1>
 
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ padding: "0 16px 16px" }}>
         <PhotoUploadForm onUploaded={handleUploaded} />
       </div>
 
-      <GlobePhotos photos={photos} />
+      <CesiumGlobe photos={photos} />
     </div>
   );
 }

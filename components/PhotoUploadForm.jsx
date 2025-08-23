@@ -1,16 +1,7 @@
+// components/PhotoUploadForm.jsx
 import { useState } from "react";
 import * as exifr from "exifr";
-import { supabase } from "../lib/supabaseClient"; // 既存のクライアントを使用
-
-function buildSafePath(file) {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-  const uuid = (crypto?.randomUUID?.() || String(Date.now()));
-  // 元の名前は使わず ASCII のみで構成
-  return `${yyyy}/${mm}/${uuid}.${ext}`; 
-}
+import { supabase } from "../lib/supabaseClient";
 
 export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
   const [file, setFile] = useState(null);
@@ -32,13 +23,11 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
       setPreviewUrl("");
       return;
     }
-    // プレビュー
     const url = URL.createObjectURL(f);
     setPreviewUrl(url);
 
-    // EXIF(GPS/撮影日時)
     try {
-      const gps = await exifr.gps(f); // { latitude, longitude }（入っていれば）
+      const gps = await exifr.gps(f);
       if (gps?.latitude && gps?.longitude) {
         setLat(Number(gps.latitude).toFixed(6));
         setLng(Number(gps.longitude).toFixed(6));
@@ -71,6 +60,15 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     );
   }
 
+  function buildSafePath(f) {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const ext = (f.name.split(".").pop() || "bin").toLowerCase();
+    const uuid = (crypto?.randomUUID?.() || String(Date.now()));
+    return `${yyyy}/${mm}/${uuid}.${ext}`; // ASCII安全キー
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setMsg("");
@@ -88,17 +86,17 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     try {
       const path = buildSafePath(file);
 
-      // 1) Storage にアップロード
+      // 1) Storage にアップロード（Public バケット想定）
       const { error: upErr } = await supabase.storage
         .from(bucket)
         .upload(path, file, { upsert: false, contentType: file.type });
       if (upErr) throw upErr;
 
-      // 2) 公開URL（バケットがpublicの場合）
+      // 2) Public URL 取得
       const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
       const public_url = pub?.publicUrl || null;
 
-      // 3) DB保存（photos テーブル想定）
+      // 3) DBへメタ保存（public_url を保存）
       const payload = {
         path,
         public_url,
@@ -108,17 +106,10 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
         lng: Number(lng),
         taken_at: takenAt ? new Date(takenAt).toISOString() : null,
       };
-
-      const { data: inserted, error: insErr } = await supabase
-        .from("photos")
-        .insert(payload)
-        .select("*")
-        .single();
-
+      const { error: insErr } = await supabase.from("photos").insert(payload);
       if (insErr) throw insErr;
 
       setMsg("✅ アップロードに成功しました！");
-      // フォーム初期化
       setFile(null);
       setPreviewUrl("");
       setTitle("");
@@ -127,7 +118,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
       setLng("");
       setTakenAt("");
 
-      if (onUploaded) onUploaded(inserted);
+      onUploaded && onUploaded();
     } catch (err) {
       console.error(err);
       setMsg(`エラー: ${err.message || String(err)}`);
@@ -159,7 +150,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="例：東京の風景"
+              placeholder="例：逗子の海"
               style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff" }}
             />
           </div>
@@ -230,7 +221,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
       <div style={{ marginTop: 12, color: "#aaa", fontSize: 12, lineHeight: 1.5 }}>
         ※ iOSの共有設定で位置情報を削除していると EXIF GPS は入っていない場合があります。<br />
-        ※ バケットが非公開の場合は getPublicUrl の代わりに署名付きURLの発行を検討してください。
+        ※ Public バケットなので `public_url` をそのまま表示に使えます。
       </div>
     </div>
   );
