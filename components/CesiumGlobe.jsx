@@ -28,6 +28,7 @@ export default function CesiumGlobe({ photos = [] }) {
       selectionIndicator: false, // ← 緑のエフェクトを消す
     });
     viewerRef.current = viewer;
+    viewer.scene.globe.enableLighting = false;
 
     // 画面をクッキリ
     viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2);
@@ -41,6 +42,8 @@ export default function CesiumGlobe({ photos = [] }) {
         credit: "NASA Blue Marble (GIBS)",
       })
     );
+    nasa.brightness = 2.0;
+
     const voyager = viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://cartodb-basemaps-{s}.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png",
@@ -49,6 +52,7 @@ export default function CesiumGlobe({ photos = [] }) {
         credit: "© OpenStreetMap contributors © Carto",
       })
     );
+
     const hFar = 700_000, hNear = 10_000;
     viewer.scene.postRender.addEventListener(() => {
       const h = viewer.camera.positionCartographic.height;
@@ -59,7 +63,7 @@ export default function CesiumGlobe({ photos = [] }) {
 
     // 初期視点
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(139.7671, 35.6812, 2_000_000),
+      destination: Cesium.Cartesian3.fromDegrees(139.7671, 35.6812, 20_000_000),
       duration: 0.0,
     });
 
@@ -120,10 +124,10 @@ export default function CesiumGlobe({ photos = [] }) {
           image: thumbUrl(p.public_url, texSize, texSize),
           width: cssSize,
           height: cssSize,
+          color: Cesium.Color.WHITE.withAlpha(1.0), // ← 透明度を固定
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           // 正しい順序: (near, nearValue, far, farValue)
           scaleByDistance: new Cesium.NearFarScalar(NEAR, 1.2, FAR, 0.85),
-          translucencyByDistance: new Cesium.NearFarScalar(2.0e5, 1.0, 2.0e6, 0.6),
         },
         properties: { ...p },   // ← クリック時に丸ごと取り出す用
       });
