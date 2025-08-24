@@ -1,10 +1,13 @@
 // components/PhotoUploadForm.jsx
+"use client";
+
 import { useState } from "react";
-import * as exifr from "exifr";
+import exifr from "exifr";
 import { supabase } from "../lib/supabaseClient";
 
 export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
-  const [file, setFile] = useState(null);
+  const [file, setFile] = useState(null);            // 元の選択ファイル
+  const [uploadFile, setUploadFile] = useState(null); // 実際にアップロードするファイル（HEICならJPEGに変換したもの）
   const [previewUrl, setPreviewUrl] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -14,34 +17,144 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
   const [isUploading, setIsUploading] = useState(false);
   const [msg, setMsg] = useState("");
 
+  const isHeicLike = (f) => {
+    if (!f) return false;
+    const t = (f.type || "").toLowerCase();
+    const n = (f.name || "").toLowerCase();
+    return t.includes("heic") || t.includes("heif") || /\.hei[cf]$/i.test(n);
+  };
+
+  function dmsToDeg(v, ref) {
+    if (!v) return null;
+    const toNum = (x) =>
+      typeof x === "number"
+        ? x
+        : x?.numerator !== undefined && x?.denominator
+        ? x.numerator / x.denominator
+        : Array.isArray(x) && x.length === 2
+        ? x[0] / x[1]
+        : Number(x);
+    const d = toNum(v[0]);
+    const m = toNum(v[1]);
+    const s = toNum(v[2]);
+    if ([d, m, s].some((n) => Number.isNaN(n))) return null;
+    let deg = d + m / 60 + s / 3600;
+    if (ref && (ref === "S" || ref === "W")) deg = -deg;
+    return deg;
+  }
+
+  async function extractLatLngFromExif(f) {
+    // 1) exifr.gps
+    try {
+      const g = await exifr.gps(f);
+      if (g?.latitude != null && g?.longitude != null) {
+        return { lat: g.latitude, lng: g.longitude };
+      }
+    } catch {}
+    // 2) 広めにパース
+    try {
+      const tags = await exifr.parse(f, { gps: true, exif: true, ifd0: true, xmp: true });
+      if (!tags) return null;
+
+      if (tags.latitude != null && tags.longitude != null) {
+        return { lat: Number(tags.latitude), lng: Number(tags.longitude) };
+      }
+      if (tags.GPSLatitude && tags.GPSLongitude) {
+        const latRef = tags.GPSLatitudeRef || tags.GPSLatitude?.ref || "N";
+        const lngRef = tags.GPSLongitudeRef || tags.GPSLongitude?.ref || "E";
+        const latDeg = Array.isArray(tags.GPSLatitude) ? dmsToDeg(tags.GPSLatitude, latRef) : Number(tags.GPSLatitude);
+        const lngDeg = Array.isArray(tags.GPSLongitude) ? dmsToDeg(tags.GPSLongitude, lngRef) : Number(tags.GPSLongitude);
+        if (Number.isFinite(latDeg) && Number.isFinite(lngDeg)) {
+          return { lat: latDeg, lng: lngDeg };
+        }
+      }
+      if (tags.GPS?.Latitude && tags.GPS?.Longitude) {
+        return { lat: Number(tags.GPS.Latitude), lng: Number(tags.GPS.Longitude) };
+      }
+    } catch {}
+    return null;
+  }
+
+  async function extractTakenAt(f) {
+    try {
+      const meta = await exifr.parse(f, { pick: ["DateTimeOriginal", "CreateDate"], exif: true, ifd0: true });
+      const dt = meta?.DateTimeOriginal || meta?.CreateDate;
+      if (dt instanceof Date) {
+        const yyyy = dt.getFullYear();
+        const mm = String(dt.getMonth() + 1).padStart(2, "0");
+        const dd = String(dt.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+    } catch {}
+    return "";
+  }
+
   async function handleFileChange(e) {
     const f = e.target.files?.[0] || null;
     setFile(f);
+    setUploadFile(null);
     setMsg("");
 
     if (!f) {
       setPreviewUrl("");
       return;
     }
-    const url = URL.createObjectURL(f);
-    setPreviewUrl(url);
 
+    // まずプレビュー用URLを作る（HEICは後で上書き）
+    let localPreview = URL.createObjectURL(f);
+    setPreviewUrl(localPreview);
+
+    // 1) EXIF（緯度経度/日付）をまず元ファイルから頑張って読む
+    //    ※ HEICの場合、ここで取得できないことが多いです
     try {
-      const gps = await exifr.gps(f);
-      if (gps?.latitude && gps?.longitude) {
-        setLat(Number(gps.latitude).toFixed(6));
-        setLng(Number(gps.longitude).toFixed(6));
-      }
-      const exif = await exifr.parse(f, { pick: ["DateTimeOriginal", "CreateDate"] });
-      const dt = exif?.DateTimeOriginal || exif?.CreateDate;
-      if (dt instanceof Date) {
-        const yyyy = dt.getFullYear();
-        const mm = String(dt.getMonth() + 1).padStart(2, "0");
-        const dd = String(dt.getDate()).padStart(2, "0");
-        setTakenAt(`${yyyy}-${mm}-${dd}`);
+      const pos = await extractLatLngFromExif(f);
+      if (pos) {
+        setLat(pos.lat.toFixed(6));
+        setLng(pos.lng.toFixed(6));
+      } else {
+        setLat(""); setLng("");
       }
     } catch (err) {
-      console.warn("EXIF 読み取りエラー:", err);
+      console.warn("GPS read error:", err);
+    }
+    const taken = await extractTakenAt(f);
+    if (taken) setTakenAt(taken);
+
+    // 2) HEIC/HEIFなら JPEG に変換（EXIFは基本的に消えます）
+    if (isHeicLike(f)) {
+      try {
+        if (typeof window === "undefined") {
+          // SSR保険（念のため）
+          setUploadFile(f);
+          return;
+        }
+        // ✅ クライアント側でだけ読み込む
+        const { default: heic2any } = await import("heic2any");
+        const jpegBlob = await heic2any({ blob: f, toType: "image/jpeg", quality: 0.92 });
+        const outName = f.name.replace(/\.(heic|heif)$/i, ".jpg");
+        const jpegFile = new File([jpegBlob], outName, { type: "image/jpeg" });
+
+        // プレビューをJPEGに差し替え
+        const prev = URL.createObjectURL(jpegFile);
+        setPreviewUrl(prev);
+
+        // アップロード対象をJPEGに
+        setUploadFile(jpegFile);
+
+        // もしさっきEXIFが取れていなければ、ここでメッセージ
+        setMsg((m) =>
+          (m ? m + "\n" : "") +
+          "ℹ️ HEICをJPEGに変換して表示・アップロードします。多くの場合EXIFは変換で失われるため、緯度経度が自動入力されないことがあります。必要なら「現在地を使用」か手入力をご利用ください。"
+        );
+      } catch (err) {
+        console.error("HEIC変換失敗:", err);
+        setMsg((m) => (m ? m + "\n" : "") + "HEICのJPEG変換に失敗しました。別形式でお試しください。");
+        // 変換に失敗した場合はオリジナルをそのままアップロード候補に
+        setUploadFile(f);
+      }
+    } else {
+      // JPEG/PNG などはそのままアップロード
+      setUploadFile(f);
     }
   }
 
@@ -65,15 +178,16 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const ext = (f.name.split(".").pop() || "bin").toLowerCase();
-    const uuid = (crypto?.randomUUID?.() || String(Date.now()));
-    return `${yyyy}/${mm}/${uuid}.${ext}`; // ASCII安全キー
+    const uuid = crypto?.randomUUID?.() || String(Date.now());
+    return `${yyyy}/${mm}/${uuid}.${ext}`;
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setMsg("");
 
-    if (!file) {
+    const f = uploadFile || file;
+    if (!f) {
       setMsg("画像ファイルを選択してください。");
       return;
     }
@@ -84,19 +198,16 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
     setIsUploading(true);
     try {
-      const path = buildSafePath(file);
+      const path = buildSafePath(f);
 
-      // 1) Storage にアップロード（Public バケット想定）
       const { error: upErr } = await supabase.storage
         .from(bucket)
-        .upload(path, file, { upsert: false, contentType: file.type });
+        .upload(path, f, { upsert: false, contentType: f.type || "application/octet-stream" });
       if (upErr) throw upErr;
 
-      // 2) Public URL 取得
       const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
       const public_url = pub?.publicUrl || null;
 
-      // 3) DBへメタ保存（public_url を保存）
       const payload = {
         path,
         public_url,
@@ -111,6 +222,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
       setMsg("✅ アップロードに成功しました！");
       setFile(null);
+      setUploadFile(null);
       setPreviewUrl("");
       setTitle("");
       setDescription("");
@@ -134,7 +246,11 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
         <div>
           <label style={{ display: "block", marginBottom: 6 }}>画像ファイル</label>
-          <input type="file" accept="image/*" onChange={handleFileChange} />
+          <input
+            type="file"
+            accept="image/*,.heic,.heif"
+            onChange={handleFileChange}
+          />
           {previewUrl && (
             <img
               src={previewUrl}
@@ -144,14 +260,14 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
           )}
         </div>
 
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+        <div style={{ display: "grid", gap: 30, gridTemplateColumns: "1fr 1fr" }}>
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>タイトル（任意）</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="例：逗子の海"
-              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff" }}
+              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff", boxSizing: "border-box" }}
             />
           </div>
           <div>
@@ -160,23 +276,12 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
               type="date"
               value={takenAt}
               onChange={(e) => setTakenAt(e.target.value)}
-              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff" }}
+              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff", boxSizing: "border-box" }}
             />
           </div>
         </div>
 
-        <div>
-          <label style={{ display: "block", marginBottom: 6 }}>説明（任意）</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="メモや場所の補足など"
-            rows={3}
-            style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff" }}
-          />
-        </div>
-
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr auto" }}>
+        <div style={{ display: "grid", gap: 30, gridTemplateColumns: "1fr 1fr auto" }}>
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>緯度 (lat)</label>
             <input
@@ -185,7 +290,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
               value={lat}
               onChange={(e) => setLat(e.target.value)}
               placeholder="35.xxxxxx"
-              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff" }}
+              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff", boxSizing: "border-box" }}
             />
           </div>
           <div>
@@ -196,13 +301,13 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
               value={lng}
               onChange={(e) => setLng(e.target.value)}
               placeholder="139.xxxxxx"
-              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff" }}
+              style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff", boxSizing: "border-box" }}
             />
           </div>
           <button
             type="button"
             onClick={useCurrentLocation}
-            style={{ alignSelf: "end", padding: "8px 12px", borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff" }}
+            style={{ alignSelf: "end", padding: "8px 12px", borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff", boxSizing: "border-box" }}
           >
             現在地を使用
           </button>
@@ -220,7 +325,8 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
       {msg && <p style={{ marginTop: 10, color: "#a5f3fc", whiteSpace: "pre-line" }}>{msg}</p>}
 
       <div style={{ marginTop: 12, color: "#aaa", fontSize: 12, lineHeight: 1.5 }}>
-        ※ iOSの共有設定で位置情報を削除していると EXIF GPS は入っていない場合があります。<br />
+        ※ HEIC→JPEG 変換では多くの場合 EXIF が失われます。<br />
+        ※ EXIFが無い場合は「現在地を使用」か手入力をご利用ください。<br />
         ※ Public バケットなので `public_url` をそのまま表示に使えます。
       </div>
     </div>
