@@ -1,7 +1,7 @@
 // components/CompanyInfo.js
 import React from 'react';
 import countryCodeToEmoji from './countryCodeToEmoji.js';
-import CommentBox from './comment.js';
+import CommentBox from './CommentBox.jsx';
 
 export default function CompanyInfo({ company, onClose }) {
   if (!company) return null;

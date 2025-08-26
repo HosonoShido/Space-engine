@@ -1,6 +1,6 @@
 import { useState , useEffect } from 'react';
 import Link from 'next/link';
-import CommentSection from '../components/comment';
+import CommentSection from '../components/CommentBox';
 
 export default function Food() {
   const initialData=[
