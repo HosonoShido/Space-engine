@@ -144,7 +144,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
         // もしさっきEXIFが取れていなければ、ここでメッセージ
         setMsg((m) =>
           (m ? m + "\n" : "") +
-          "ℹ️ HEICをJPEGに変換して表示・アップロードします。多くの場合EXIFは変換で失われるため、緯度経度が自動入力されないことがあります。必要なら「現在地を使用」か手入力をご利用ください。"
+          "緯度経度が自動取得されないことがあります。必要なら「現在地を使用」か手入力をご利用ください。"
         );
       } catch (err) {
         console.error("HEIC変換失敗:", err);
@@ -262,11 +262,11 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
         <div style={{ display: "grid", gap: 30, gridTemplateColumns: "1fr 1fr" }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6 }}>タイトル（任意）</label>
+            <label style={{ display: "block", marginBottom: 6 }}>説明（任意）</label>
             <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例：逗子の海"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="例：美しい海の景色です"
               style={{ width: "100%", padding: 8, borderRadius: 10, border: "1px solid #333", background: "#000", color: "#fff", boxSizing: "border-box" }}
             />
           </div>
@@ -324,10 +324,9 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
       {msg && <p style={{ marginTop: 10, color: "#a5f3fc", whiteSpace: "pre-line" }}>{msg}</p>}
 
-      <div style={{ marginTop: 12, color: "#aaa", fontSize: 12, lineHeight: 1.5 }}>
-        ※ HEIC→JPEG 変換では多くの場合 EXIF が失われます。<br />
-        ※ EXIFが無い場合は「現在地を使用」か手入力をご利用ください。<br />
-        ※ Public バケットなので `public_url` をそのまま表示に使えます。
+      <div style={{ marginTop: 12, color: "red", fontSize: 18, lineHeight: 1.5 }}>
+        ⚠️プライベートすぎる写真を投稿する際は、正確な位置情報を入力しないでください。必ず位置情報を省略するか、おおよその場所にしてください。<br />
+        例：緯度 35.468083 → 35.4681など<br />
       </div>
     </div>
   );

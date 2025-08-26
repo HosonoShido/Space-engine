@@ -203,7 +203,7 @@ export default function CesiumGlobe({ photos = [] }) {
             cursor: "grab",
             userSelect: "none",
             touchAction: "none",
-            maxHeight: "80vh",
+            maxHeight: "100vh",
             overflow: "hidden",
           }}
         >

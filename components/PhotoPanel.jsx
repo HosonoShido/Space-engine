@@ -9,15 +9,16 @@ export default function PhotoPanel({ photo, onClose }) {
   return (
     <div
       style={{
-        width: 360,
-        maxWidth: "90vw",
+        width: 400,
+        maxWidth: "100vw",
         background: "rgba(0,0,0,0.85)",
         color: "#eee",
         border: "1px solid #333",
         borderRadius: 14,
         boxShadow: "0 6px 24px rgba(0,0,0,0.6)",
         // ★ パネル全体は画面内で固定し、縦に並べる
-        height: "80vh",
+        height: "100vh",
+        boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
       }}
@@ -32,9 +33,8 @@ export default function PhotoPanel({ photo, onClose }) {
           flex: "0 0 auto",
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: 16, flex: 1 }}>
-          {photo.title || "無題の写真"}{" "}
-          {photo.taken_at ? `• ${new Date(photo.taken_at).toLocaleDateString("ja-JP")}` : ""}
+        <div style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>
+          {photo.taken_at ? `${new Date(photo.taken_at).toLocaleDateString("ja-JP")}` : ""}
         </div>
         <button
           onClick={onClose}
