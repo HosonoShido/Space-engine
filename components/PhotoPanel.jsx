@@ -9,7 +9,7 @@ export default function PhotoPanel({ photo, onClose }) {
   return (
     <div
       style={{
-        width: 400,
+        width: 360,
         maxWidth: "100vw",
         background: "rgba(0,0,0,0.85)",
         color: "#eee",
@@ -17,7 +17,7 @@ export default function PhotoPanel({ photo, onClose }) {
         borderRadius: 14,
         boxShadow: "0 6px 24px rgba(0,0,0,0.6)",
         // ★ パネル全体は画面内で固定し、縦に並べる
-        height: "100vh",
+        height: "90vh",
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -61,7 +61,7 @@ export default function PhotoPanel({ photo, onClose }) {
             width: "100%",
             height: "auto",
             objectFit: "contain",
-            maxHeight: 300, // ★必要なら調整（写真エリアの上限）
+            maxHeight: 360, // ★必要なら調整（写真エリアの上限）
           }}
         />
       </div>

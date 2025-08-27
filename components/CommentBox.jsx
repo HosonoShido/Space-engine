@@ -79,8 +79,7 @@ export default function CommentBox({ targetType, targetId }) {
 
   return (
     <NoDragArea style={{ maxWidth: "400px" }}>
-      <h3>💬 コメント</h3>
-
+      <p>💬 コメント</p>
       <input
         placeholder="名前"
         value={username}

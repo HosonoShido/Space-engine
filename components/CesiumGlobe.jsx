@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import PhotoPanel from "./PhotoPanel";
+import PhotoUploadForm from "./PhotoUploadForm";
 
 export default function CesiumGlobe({ photos = [] }) {
   const containerRef = useRef(null);
@@ -154,10 +155,67 @@ export default function CesiumGlobe({ photos = [] }) {
     window.addEventListener("pointerup", up);
   }
 
+  const [showForm, setShowForm] = useState(false);
+  const handleUploaded = async () => {
+    setShowForm(false);
+  };
+
+
   // --- レンダリング ---
   return (
-    <div style={{ position: "relative", width: "100%", height: "100vh", overflow: "hidden" }}>
+    <div style={{ position: "fixed", inset: 0, width: "100%", height: "100dvh", overflow: "clip" }}>
       <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          zIndex: 10000,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: 16,
+        }}
+      >
+        <p style={{ color: "white", margin: 0, paddingRight: 12 }}>🌍 hotospot.com</p>
+
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          aria-expanded={showForm}
+          style={{
+            background: "rgba(42, 42, 42, 0.8)", // 回転ボタンと統一
+            color: "white",
+            border: "1px solid #666",
+            borderRadius: "4px",
+            padding: "8px 12px",
+            cursor: "pointer",
+          }}
+        >
+          {showForm ? "閉じる" : "投稿する"}
+        </button>
+      </div>
+
+      {/* 投稿フォーム（重ねて表示） */}
+      {showForm && (
+        <div
+          style={{
+            position: "absolute",
+            top: 64,         // ヘッダーの下あたり
+            left: 16,
+            zIndex: 10000,
+            background: "rgba(0,0,0,0.7)",
+            border: "1px solid #333",
+            borderRadius: 8,
+            padding: 12,
+            maxHeight: "60vh",
+            overflow: "hidden",
+            overscrollBehavior: "contain",
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          <PhotoUploadForm onUploaded={handleUploaded} />
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
