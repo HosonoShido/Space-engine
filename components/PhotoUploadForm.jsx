@@ -241,7 +241,12 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
   return (
     <div style={{ background: "#111", color: "#eee", padding: 16, borderRadius: 16 }}>
-      <h2 style={{ margin: 0, marginBottom: 12 }}>📷 写真を投稿</h2>
+      <h2 style={{ margin: 0, marginBottom: 12}}>📷 写真を投稿
+        <span style={{ marginLeft: "2%", color: "red", fontSize: 12 }}>
+        ⚠️ プライベートな写真は正確な位置情報を入れず、おおよその場所にしてください。
+        例：35.468083 → 35.4681
+      </span>
+      </h2>
 
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
         <div>
@@ -324,10 +329,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
       {msg && <p style={{ marginTop: 10, color: "#a5f3fc", whiteSpace: "pre-line" }}>{msg}</p>}
 
-      <div style={{ marginTop: 12, color: "red", fontSize: 18, lineHeight: 1.5 }}>
-        ⚠️プライベートすぎる写真を投稿する際は、正確な位置情報を入力しないでください。必ず位置情報を省略するか、おおよその場所にしてください。<br />
-        例：緯度 35.468083 → 35.4681など<br />
-      </div>
+      
     </div>
   );
 }
