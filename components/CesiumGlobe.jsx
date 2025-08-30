@@ -200,14 +200,16 @@ export default function CesiumGlobe({ photos = [] }) {
         <div
           style={{
             position: "absolute",
-            top: 64,         // ヘッダーの下あたり
-            left: 16,
+            top: "50%",         // ヘッダーの下あたり
+            left: "50%",
+            transform: "translate(-50%, -50%)",
             zIndex: 10000,
             background: "rgba(0,0,0,0.7)",
             border: "1px solid #333",
             borderRadius: 8,
             padding: 12,
             maxHeight: "80dvh",
+            width: "90%",
             overflowY: "auto",
             overscrollBehavior: "contain",
             backdropFilter: "blur(2px)",
