@@ -242,10 +242,10 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
   return (
     <div style={{ background: "#111", color: "#eee", padding: 16, borderRadius: 16 }}>
       <h2 style={{ margin: 0, marginBottom: 12}}>📷 写真を投稿
-        <span style={{ marginLeft: "2%", color: "red", fontSize: 12 }}>
-        ⚠️ プライベートな写真は正確な位置情報を入れず、おおよその場所にしてください。
+        <div style={{ marginLeft: "2%", color: "red", fontSize: 12 }}>
+        ⚠️プライベートな写真は正確な位置情報を入れないでください！
         例：35.468083 → 35.4681
-      </span>
+        </div>
       </h2>
 
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
