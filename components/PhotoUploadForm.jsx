@@ -240,7 +240,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
   }
 
   return (
-    <div style={{ height: "100dvh", maxHeight: "100dvh", background: "#111", color: "#eee", padding: 16, borderRadius: 16}}>
+    <div style={{ background: "#111", color: "#eee", padding: 16, borderRadius: 16 }}>
       <h2 style={{ margin: 0, marginBottom: 12 }}>📷 写真を投稿</h2>
 
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
