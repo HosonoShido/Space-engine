@@ -207,8 +207,9 @@ export default function CesiumGlobe({ photos = [] }) {
             border: "1px solid #333",
             borderRadius: 8,
             padding: 12,
-            maxHeight: "60vh",
-            overflow: "hidden",
+            width: "50%",
+            maxHeight: "80dvh",
+            overflowY: "auto",
             overscrollBehavior: "contain",
             backdropFilter: "blur(2px)",
           }}
@@ -262,7 +263,7 @@ export default function CesiumGlobe({ photos = [] }) {
             userSelect: "none",
             touchAction: "none",
             maxHeight: "100vh",
-            overflow: "hidden",
+            overflowY: "auto",
           }}
         >
           <PhotoPanel
