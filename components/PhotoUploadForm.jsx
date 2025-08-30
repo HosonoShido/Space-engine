@@ -255,7 +255,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
             <img
               src={previewUrl}
               alt="preview"
-              style={{ marginTop: 8, width: "100%", maxHeight: 320, objectFit: "contain", borderRadius: 12 }}
+              style={{ marginTop: 8, width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 8 }}
             />
           )}
         </div>

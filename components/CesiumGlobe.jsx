@@ -207,7 +207,7 @@ export default function CesiumGlobe({ photos = [] }) {
             border: "1px solid #333",
             borderRadius: 8,
             padding: 12,
-            maxHeight: "100dvh",
+            maxHeight: "80dvh",
             overflowY: "auto",
             overscrollBehavior: "contain",
             backdropFilter: "blur(2px)",
