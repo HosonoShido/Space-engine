@@ -36,6 +36,27 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     }
   }, [file, uploadFile, lat, lng, imgLoaded, isConverting]);
 
+  // 追加: フォーム内でのEnter送信をブロック
+  function handleKeyDown(e) {
+    // 日本語入力の確定中は除外（変換確定Enterで誤ブロックしない）
+    if (e.isComposing) return;
+
+    if (e.key === "Enter") {
+      const tag = e.target.tagName.toLowerCase();
+      const type = (e.target.type || "").toLowerCase();
+
+      // Enterを許可するケース（必要なら調整）
+      const isTextarea = tag === "textarea";
+      const isSubmitOrButton = tag === "button" || type === "submit" || type === "button";
+
+      // 上記以外（input=number/date/textなど）では送信させない
+      if (!isTextarea && !isSubmitOrButton) {
+        e.preventDefault(); // ここで送信を止める
+      }
+    }
+  }
+
+
   const isHeicLike = (f) => {
     if (!f) return false;
     const t = (f.type || "").toLowerCase();
@@ -213,6 +234,12 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    // ボタンクリック以外（Enterなど）を無効化
+    const submitter = e.nativeEvent?.submitter;
+      if (!submitter || submitter.name !== "postBtn") {
+        return; // 何もせず終了
+      }
+
     setMsg("");
 
     const f = uploadFile || file;
@@ -284,7 +311,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
         </div>
       </h2>
 
-      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
+      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} style={{ display: "grid", gap: 12 }}>
         <div>
           <label style={{ display: "block", marginBottom: 6 }}>画像ファイル</label>
           <input
@@ -408,6 +435,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
         </div>
 
         <button
+          name="postBtn" // クリックされたボタンを識別するための名前
           type="submit"
           disabled={isUploading || isConverting}
           aria-busy={isUploading || isConverting}
