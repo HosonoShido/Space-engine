@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import PhotoPanel from "./PhotoPanel";
 import PhotoUploadForm from "./PhotoUploadForm";
+import { supabase } from "../lib/supabaseClient";
+
 
 export default function CesiumGlobe({ photos = [] }) {
   const containerRef = useRef(null);
@@ -94,39 +96,80 @@ export default function CesiumGlobe({ photos = [] }) {
     };
   }, []);
 
+  function downscaleInBrowser(src, maxPx = 160, mime = "image/webp", quality = 0.82) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = async () => {
+        const { naturalWidth: w0, naturalHeight: h0 } = img;
+        if (!w0 || !h0) return resolve(src);
+        const scale = Math.min(1, maxPx / Math.max(w0, h0));
+        const w = Math.max(1, Math.round(w0 * scale));
+        const h = Math.max(1, Math.round(h0 * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        try {
+          if ("createImageBitmap" in window) {
+            const bmp = await createImageBitmap(img, { resizeWidth: w, resizeHeight: h, resizeQuality: "high" });
+            ctx.drawImage(bmp, 0, 0, w, h);
+          } else {
+            ctx.drawImage(img, 0, 0, w, h);
+          }
+        } catch {
+          ctx.drawImage(img, 0, 0, w, h);
+        }
+        try {
+          const dataUrl = canvas.toDataURL(mime, quality);
+          resolve(dataUrl || src);
+        } catch {
+          resolve(src);
+        }
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+  }
+
   // --- photosプロパティの変更を監視してBillboardを更新 ---
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
+
+    let alive = true;
 
     viewer.entities.values
       .filter((e) => e._isPhotoEntity)
       .forEach((e) => viewer.entities.remove(e));
 
     const cssSize = 48;
-    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const dpr = Math.max(1, Math.min(2,window.devicePixelRatio || 1));
     const texSize = cssSize * dpr;
+
+    //サムネの最大ピクセルをハード上限（例: 128px）に固定して“原寸を取らない”
+    const THUMB_MAX = 160;
+    const thumbPx = Math.min(texSize, THUMB_MAX);
+
     const NEAR = 5.0e4;
     const FAR  = 1.5e6;
 
-    const thumbUrl = (original, w, h = w) => {
-      try {
-        const url = new URL(original);
-        url.searchParams.set("width", String(w));
-        url.searchParams.set("height", String(h));
-        url.searchParams.set("resize", "cover");
-        url.searchParams.set("format", "webp");
-        url.searchParams.set("quality", "90");
-        return url.toString();
-      } catch { return original; }
-    };
+    async function resolveThumbSrc(publicUrl, targetPx) {
+      // HEICはブラウザ非対応 → プレースホルダ
+      if (/\.(heic|heif)$/i.test(publicUrl)) {
+        return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='%232a2a2a'/></svg>";
+      }
+      return await downscaleInBrowser(publicUrl, Math.min(targetPx, THUMB_MAX));
+    }
 
     photos.forEach((p) => {
       if (p?.lat == null || p?.lng == null || !p.public_url) return;
       const ent = viewer.entities.add({
         position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat),
         billboard: {
-          image: thumbUrl(p.public_url, texSize, texSize),
+          image: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='%232a2a2a'/></svg>",
           width: cssSize,
           height: cssSize,
           color: Cesium.Color.WHITE.withAlpha(1.0),
@@ -137,8 +180,15 @@ export default function CesiumGlobe({ photos = [] }) {
       });
       ent._isPhotoEntity = true;
       ent._photo = p;
-    });
-  }, [photos]);
+      resolveThumbSrc(p.public_url, texSize).then((src) => {
+        if (!alive) return; // StrictModeでunmount後の反映を防止
+        if (!viewer.isDestroyed() && ent.billboard) {
+          ent.billboard.image = src;
+        }
+      });
+  });
+  return () => { alive = false; };
+}, [photos]);
 
   // --- パネルのドラッグ処理 ---
   function onPanelPointerDown(e) {

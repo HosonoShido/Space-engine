@@ -25,8 +25,6 @@ export default function Home() {
     loadPhotos();
   }, []);
 
-
-
   return (
     <div style={{ position: "fixed", inset: 0, height: "100dvh", overflowY: "auto" }}>
       <CesiumGlobe photos={photos} />
