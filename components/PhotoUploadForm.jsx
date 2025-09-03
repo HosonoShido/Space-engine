@@ -23,13 +23,18 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
   const prevUrlRef = useRef(null); // 直前のObjectURLを破棄するため
 
   useEffect(() => {
-    if ((uploadFile || file) && lat && lng && imgLoaded && !isConverting) {
-      setMsg("投稿準備完了です!");
-    } 
-    else {
-      setMsg("");
+    if (
+      (uploadFile || file) &&  // ファイルがある
+      lat &&                   // 緯度がある
+      lng &&                   // 経度がある
+      imgLoaded &&             // プレビューが読み込まれた
+      !isConverting            // 変換中ではない
+    ) {
+      setMsg("投稿準備完了です！");
+    } else {
+      setMsg(""); // 条件がそろっていない間は空
     }
-  }, [file, uploadFile, lat, lng, imgLoaded, !isConverting]);
+  }, [file, uploadFile, lat, lng, imgLoaded, isConverting]);
 
   const isHeicLike = (f) => {
     if (!f) return false;
@@ -105,7 +110,13 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     const f = e.target.files?.[0] || null;
     setFile(f);
     setUploadFile(null);
+    setLat("");
+    setLng("");
+    setTakenAt("");
+    setImgLoaded(false);
     setMsg("");
+    // HEIC なら「変換中」を先に立てておく（readyを阻止）
+    setIsConverting(isHeicLike(f));
 
     // 既存プレビューURLの破棄（メモリ節約）
     if (prevUrlRef.current) {
