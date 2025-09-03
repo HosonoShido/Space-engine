@@ -1,12 +1,12 @@
 // components/PhotoUploadForm.jsx
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import exifr from "exifr";
 import { supabase } from "../lib/supabaseClient";
 
 export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
-  const [file, setFile] = useState(null);            // 元の選択ファイル
+  const [file, setFile] = useState(null);             // 元の選択ファイル
   const [uploadFile, setUploadFile] = useState(null); // 実際にアップロードするファイル（HEICならJPEGに変換したもの）
   const [previewUrl, setPreviewUrl] = useState("");
   const [title, setTitle] = useState("");
@@ -16,6 +16,20 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
   const [takenAt, setTakenAt] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [msg, setMsg] = useState("");
+
+  // ▼ 追加
+  const [isConverting, setIsConverting] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const prevUrlRef = useRef(null); // 直前のObjectURLを破棄するため
+
+  useEffect(() => {
+    if ((uploadFile || file) && lat && lng && imgLoaded && !isConverting) {
+      setMsg("投稿準備完了です!");
+    } 
+    else {
+      setMsg("");
+    }
+  }, [file, uploadFile, lat, lng, imgLoaded, !isConverting]);
 
   const isHeicLike = (f) => {
     if (!f) return false;
@@ -44,14 +58,12 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
   }
 
   async function extractLatLngFromExif(f) {
-    // 1) exifr.gps
     try {
       const g = await exifr.gps(f);
       if (g?.latitude != null && g?.longitude != null) {
         return { lat: g.latitude, lng: g.longitude };
       }
     } catch {}
-    // 2) 広めにパース
     try {
       const tags = await exifr.parse(f, { gps: true, exif: true, ifd0: true, xmp: true });
       if (!tags) return null;
@@ -95,17 +107,27 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     setUploadFile(null);
     setMsg("");
 
+    // 既存プレビューURLの破棄（メモリ節約）
+    if (prevUrlRef.current) {
+      URL.revokeObjectURL(prevUrlRef.current);
+      prevUrlRef.current = null;
+    }
+
     if (!f) {
       setPreviewUrl("");
+      setImgLoaded(false);
       return;
     }
 
-    // まずプレビュー用URLを作る（HEICは後で上書き）
-    let localPreview = URL.createObjectURL(f);
+    // ▼ 画像読み込み状態をリセット（ここから“くるくる”発動条件になる）
+    setImgLoaded(false);
+
+    // まずローカルプレビュー表示（HEICでも一旦表示しておく。後で差し替え）
+    const localPreview = URL.createObjectURL(f);
+    prevUrlRef.current = localPreview;
     setPreviewUrl(localPreview);
 
-    // 1) EXIF（緯度経度/日付）をまず元ファイルから頑張って読む
-    //    ※ HEICの場合、ここで取得できないことが多いです
+    // EXIF（緯度経度/日付）
     try {
       const pos = await extractLatLngFromExif(f);
       if (pos) {
@@ -120,40 +142,35 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     const taken = await extractTakenAt(f);
     if (taken) setTakenAt(taken);
 
-    // 2) HEIC/HEIFなら JPEG に変換（EXIFは基本的に消えます）
+    // HEICならJPEGに変換してプレビュー＆アップロード対象を差し替える
     if (isHeicLike(f)) {
       try {
+        setIsConverting(true);
         if (typeof window === "undefined") {
-          // SSR保険（念のため）
           setUploadFile(f);
+          setIsConverting(false);
           return;
         }
-        // ✅ クライアント側でだけ読み込む
         const { default: heic2any } = await import("heic2any");
         const jpegBlob = await heic2any({ blob: f, toType: "image/jpeg", quality: 0.92 });
         const outName = f.name.replace(/\.(heic|heif)$/i, ".jpg");
         const jpegFile = new File([jpegBlob], outName, { type: "image/jpeg" });
 
-        // プレビューをJPEGに差し替え
+        // 旧URL破棄→新URL発行
+        if (prevUrlRef.current) URL.revokeObjectURL(prevUrlRef.current);
         const prev = URL.createObjectURL(jpegFile);
+        prevUrlRef.current = prev;
+
         setPreviewUrl(prev);
-
-        // アップロード対象をJPEGに
         setUploadFile(jpegFile);
-
-        // もしさっきEXIFが取れていなければ、ここでメッセージ
-        setMsg((m) =>
-          (m ? m + "\n" : "") +
-          "緯度経度が自動取得されないことがあります。必要なら「現在地を使用」か手入力をご利用ください。"
-        );
       } catch (err) {
         console.error("HEIC変換失敗:", err);
         setMsg((m) => (m ? m + "\n" : "") + "HEICのJPEG変換に失敗しました。別形式でお試しください。");
-        // 変換に失敗した場合はオリジナルをそのままアップロード候補に
         setUploadFile(f);
+      } finally {
+        setIsConverting(false);
       }
     } else {
-      // JPEG/PNG などはそのままアップロード
       setUploadFile(f);
     }
   }
@@ -171,6 +188,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
       (err) => setMsg(`位置情報エラー: ${err.message}`),
       { enableHighAccuracy: true, timeout: 10000 }
     );
+    setMsg("");
   }
 
   function buildSafePath(f) {
@@ -192,7 +210,7 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
       return;
     }
     if (lat === "" || lng === "") {
-      setMsg("緯度・経度を入力するか「現在地を使用」を押してください。");
+      setMsg("緯度経度が自動取得されないことがあります。必要なら「現在地を使用」か手入力をご利用ください。");
       return;
     }
 
@@ -229,6 +247,10 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
       setLat("");
       setLng("");
       setTakenAt("");
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current);
+        prevUrlRef.current = null;
+      }
 
       onUploaded && onUploaded();
     } catch (err) {
@@ -239,12 +261,15 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
     }
   }
 
+  // ▼ ここで“くるくる表示中か”を一元化
+  const showSpinner = !!previewUrl && (!imgLoaded || isConverting);
+
   return (
     <div style={{ background: "#111", color: "#eee", padding: 16, borderRadius: 16 }}>
       <h2 style={{ margin: 0, marginBottom: 12}}>📷 写真を投稿
         <div style={{ color: "red", fontSize: 12 }}>
-        ⚠️プライベートな写真は正確な位置情報を入れないでください！
-        例：35.468083 → 35.4681
+          ⚠️プライベートな写真は正確な位置情報を入れないでください！
+          例：35.468083 → 35.4681
         </div>
       </h2>
 
@@ -256,12 +281,65 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
             accept="image/*,.heic,.heif"
             onChange={handleFileChange}
           />
+
+          {/* ▼ プレビュー枠（サイズは既存のまま） */}
           {previewUrl && (
-            <img
-              src={previewUrl}
-              alt="preview"
-              style={{ marginTop: 8, width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 8 }}
-            />
+            <div style={{ position: "relative", marginTop: 8 }}>
+              {/* 画像（onLoadで読み込み完了を検知） */}
+              <img
+                src={previewUrl}
+                alt=""
+                onLoad={() => setImgLoaded(true)}
+                onError={() => setImgLoaded(true)} // エラーでもスピナーは止める
+                style={{
+                  width: "100%",
+                  maxHeight: 160,
+                  objectFit: "contain",
+                  borderRadius: 8,
+                }}
+              />
+
+              {/* 読み込み中オーバーレイ（SVGスピナー） */}
+              {showSpinner && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    borderRadius: 8,
+                  }}
+                >
+                  <span>読み込み中です</span>
+                  <svg width="20" height="20" viewBox="0 0 50 50" aria-hidden="true">
+                    <circle
+                      cx="25"
+                      cy="25"
+                      r="20"
+                      fill="none"
+                      stroke="#fff"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeDasharray="90,150"
+                      strokeDashoffset="0"
+                    >
+                      <animateTransform
+                        attributeName="transform"
+                        type="rotate"
+                        from="0 25 25"
+                        to="360 25 25"
+                        dur="1s"
+                        repeatCount="indefinite"
+                      />
+                    </circle>
+                  </svg>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -320,16 +398,65 @@ export default function PhotoUploadForm({ onUploaded, bucket = "photos" }) {
 
         <button
           type="submit"
-          disabled={isUploading}
-          style={{ padding: "10px 14px", borderRadius: 14, fontWeight: 700, background: "#222", color: "#fff", border: "1px solid #333" }}
+          disabled={isUploading || isConverting}
+          aria-busy={isUploading || isConverting}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 14,
+            fontWeight: 700,
+            background: "#222",
+            color: "#fff",
+            border: "1px solid #333",
+            opacity: (isUploading || isConverting) ? 0.8 : 1,
+            cursor: (isUploading || isConverting) ? "not-allowed" : "pointer",
+          }}
         >
-          {isUploading ? "アップロード中..." : "アップロード"}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              // ラベル切替でも幅がブレにくいよう、最小幅を少し確保（任意）
+              minWidth: 110,
+              justifyContent: "center",
+            }}
+          >
+            <span>
+              {isConverting
+                ? ""
+                : isUploading
+                ? "投稿中..."
+                : "投稿する"}
+            </span>
+            {(isUploading || isConverting) && (
+              // 小さなSVGスピナー（CSS不要・単体で回転）
+              <svg
+                width="16" height="16" viewBox="0 0 16 16"
+                role="img" aria-label="loading"
+              >
+                <circle
+                  cx="8" cy="8" r="6"
+                  stroke="#fff" strokeWidth="2"
+                  fill="none" strokeLinecap="round"
+                  strokeDasharray="28" strokeDashoffset="18"
+                >
+                  <animateTransform
+                    attributeName="transform"
+                    type="rotate"
+                    from="0 8 8"
+                    to="360 8 8"
+                    dur="0.8s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              </svg>
+            )}
+          </span>
         </button>
+
       </form>
 
       {msg && <p style={{ marginTop: 10, color: "#a5f3fc", whiteSpace: "pre-line" }}>{msg}</p>}
-
-      
     </div>
   );
 }
