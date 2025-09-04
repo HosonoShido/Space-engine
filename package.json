@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build && node scripts/copy-cesium.js",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postbuild": "next-sitemap"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
@@ -15,7 +16,6 @@
     "globe.gl": "^2.42.0",
     "heic2any": "^0.0.4",
     "next": "15.3.3",
-    "next-sitemap": "^4.2.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.34.3"
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "copy-webpack-plugin": "^13.0.1",
+    "next-sitemap": "^4.2.3",
     "tailwindcss": "^4"
   }
 }
