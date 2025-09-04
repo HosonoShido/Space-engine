@@ -3,7 +3,7 @@ User-agent: *
 Allow: /
 
 # Host
-Host: https://hotospot.com
+Host: https://www.hotospot.com
 
 # Sitemaps
-Sitemap: https://hotospot.com/sitemap.xml
+Sitemap: https://www.hotospot.com/sitemap.xml
