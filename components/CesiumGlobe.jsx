@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import PhotoPanel from "./PhotoPanel";
 import PhotoUploadForm from "./PhotoUploadForm";
-import { supabase } from "../lib/supabaseClient";
 
 
 export default function CesiumGlobe({ photos = [] }) {
